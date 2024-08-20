@@ -8,4 +8,4 @@ export {
   TonJettonTonStrategy,
   Vault,
   VaultFactory,
-}
+};
