@@ -1,4 +1,5 @@
-name: Publish Package to npmjs
+name: Release to NPM
+
 on:
   release:
     types: [published]
@@ -6,19 +7,27 @@ on:
     branches:
       - main
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout 🛎️
+        uses: actions/checkout@v3
+
+      - uses: pnpm/action-setup@v2
+
+      - name: Use Node LTS ✨
+        uses: actions/setup-node@v3
         with:
-          node-version: '20.x'
-          registry-url: 'https://registry.npmjs.org'
-          scope: '@parraton'
-      - run: pnpm ci
-      - run: pnpm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          node-version: lts/*
+          registry-url: https://registry.npmjs.org
+          cache: pnpm
+
+      - name: Install dependencies 📦️
+        run: pnpm install --frozen-lockfile
+
+      - name: Build 🔨
+        run: pnpm build
+
+      - uses: simenandre/publish-with-pnpm@v1
+        with:
+          npm-auth-token: ${{ secrets.NPM_TOKEN }}
