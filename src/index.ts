@@ -1,11 +1,4 @@
-import * as SharesWallet from './wrappers/SharesWallet';
-import * as TonJettonTonStrategy from './wrappers/TonJettonTonStrategy';
-import * as Vault from './wrappers/Vault';
-import * as VaultFactory from './wrappers/VaultFactory';
-
-export {
-  SharesWallet,
-  TonJettonTonStrategy,
-  Vault,
-  VaultFactory,
-};
+export *  from './wrappers/SharesWallet';
+export * from './wrappers/TonJettonTonStrategy';
+export * from './wrappers/Vault';
+export * from './wrappers/VaultFactory';
