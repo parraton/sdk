@@ -25,7 +25,9 @@
     "typescript": "^5.5.4"
   },
   "dependencies": {
-    "@dedust/sdk": "^0.8.7",
+    "@ton/core": "^0.57.0"
+  },
+  "peerDependencies": {
     "@ton/core": "^0.57.0"
   }
 }
