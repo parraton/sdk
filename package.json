@@ -1,6 +1,6 @@
 {
   "name": "@parraton/sdk",
-  "version": "1.0.1",
+  "version": "1.0.4",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -25,7 +25,9 @@
     "typescript": "^5.5.4"
   },
   "dependencies": {
-    "@dedust/sdk": "^0.8.7",
+    "@ton/core": "^0.57.0"
+  },
+  "peerDependencies": {
     "@ton/core": "^0.57.0"
   }
 }
