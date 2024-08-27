@@ -24,23 +24,23 @@ export interface VaultFees {
 
 export function vaultConfigToCell(config: VaultConfig): Cell {
     return beginCell()
-        .storeAddress(config.distributionPoolAddress)
-        .storeCoins(config.sharesTotalSupply)
-        .storeCoins(config.depositedLp)
-        .storeUint(config.isLocked, 1)
-        .storeCoins(config.managementFeeRate)
-        .storeCoins(config.managementFee)
-        .storeAddress(config.depositLpWalletAddress)
-        .storeRef(
-            beginCell()
-                .storeAddress(config.adminAddress)
-                .storeAddress(config.managerAddress)
-                .storeAddress(config.strategyAddress)
-                .endCell(),
-        )
-        .storeRef(config.sharesWalletCode)
-        .storeRef(Vault.packInitTempUpgrade())
-        .endCell();
+      .storeAddress(config.distributionPoolAddress)
+      .storeCoins(config.sharesTotalSupply)
+      .storeCoins(config.depositedLp)
+      .storeUint(config.isLocked, 1)
+      .storeCoins(config.managementFeeRate)
+      .storeCoins(config.managementFee)
+      .storeAddress(config.depositLpWalletAddress)
+      .storeRef(
+        beginCell()
+          .storeAddress(config.adminAddress)
+          .storeAddress(config.managerAddress)
+          .storeAddress(config.strategyAddress)
+          .endCell(),
+      )
+      .storeRef(config.sharesWalletCode)
+      .storeRef(Vault.packInitTempUpgrade())
+      .endCell();
 }
 
 export class Vault implements Contract {
@@ -65,6 +65,9 @@ export class Vault implements Contract {
         init_code_upgrade: 0xdf1e233d,
         init_admin_upgrade: 0x2fb94384,
         finalize_upgrades: 0x6378509f,
+        withdraw_jettons: 0x18a9ed91,
+        cancel_admin_upgrade: 0xa4ed9981,
+        cancel_code_upgrade: 0x357ccc67,
     };
     static readonly EXIT_CODES = {
         WRONG_OP: 80,
@@ -85,12 +88,14 @@ export class Vault implements Contract {
         INSUFFICIENT_REINVEST_GAS: 95,
         INSUFFICIENT_CANCEL_DEPOSIT_GAS: 96,
         INVALID_DEPOSIT_ADDRESS: 97,
+        CANT_WITHDRAW_LP: 98,
+        INVALID_CALL: 800,
         WRONG_ADMIN_OP: 801,
     };
 
     constructor(
-        readonly address: Address,
-        readonly init?: { code: Cell; data: Cell },
+      readonly address: Address,
+      readonly init?: { code: Cell; data: Cell },
     ) {}
 
     static createFromAddress(address: Address) {
@@ -111,24 +116,26 @@ export class Vault implements Contract {
         });
     }
 
-    prepareDepositPayload(fulfillAddress?: Address, fulfillPayload?: Cell) {
+    prepareDepositPayload(opts?: { referralAddress?: Address; fullfilPayload?: Cell }) {
         let depositPayload = beginCell().storeUint(Vault.OPS.deposit, 32);
-        if (fulfillAddress && fulfillPayload) {
-            depositPayload = depositPayload.storeAddress(fulfillAddress);
-            depositPayload = depositPayload.storeRef(fulfillPayload);
+        if (opts?.referralAddress) {
+            depositPayload = depositPayload.storeAddress(opts.referralAddress);
+        }
+        if (opts?.fullfilPayload) {
+            depositPayload = depositPayload.storeRef(opts.fullfilPayload);
         }
         return depositPayload.endCell();
     }
 
     async sendDepositNotification(
-        provider: ContractProvider,
-        via: Sender,
-        opts: {
-            jettonAmount: bigint;
-            fromAddress: Address;
-            value: bigint;
-            queryId?: number;
-        },
+      provider: ContractProvider,
+      via: Sender,
+      opts: {
+          jettonAmount: bigint;
+          fromAddress: Address;
+          value: bigint;
+          queryId?: number;
+      },
     ) {
         const transferPayload = await this.prepareDepositPayload();
 
@@ -136,110 +143,191 @@ export class Vault implements Contract {
             value: opts.value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                .storeUint(Vault.OPS.transfer_notification, 32)
-                .storeUint(opts.queryId ?? 0, 64)
-                .storeCoins(opts.jettonAmount)
-                .storeAddress(opts.fromAddress)
-                .storeBit(true)
-                .storeRef(transferPayload)
-                .endCell(),
+              .storeUint(Vault.OPS.transfer_notification, 32)
+              .storeUint(opts.queryId ?? 0, 64)
+              .storeCoins(opts.jettonAmount)
+              .storeAddress(opts.fromAddress)
+              .storeBit(true)
+              .storeRef(transferPayload)
+              .endCell(),
         });
     }
 
     async sendBurnNotification(
-        provider: ContractProvider,
-        via: Sender,
-        opts: {
-            queryId?: number | bigint;
-            amount: bigint;
-            responseAddress: Address;
-            value: bigint;
-        },
+      provider: ContractProvider,
+      via: Sender,
+      opts: {
+          queryId?: number | bigint;
+          amount: bigint;
+          responseAddress: Address;
+          value: bigint;
+      },
     ) {
         return provider.internal(via, {
             value: opts.value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                .storeUint(Vault.OPS.burn_notification, 32)
-                .storeUint(opts.queryId ?? 0, 64)
-                .storeCoins(opts.amount)
-                .storeAddress(opts.responseAddress)
-                .endCell(),
+              .storeUint(Vault.OPS.burn_notification, 32)
+              .storeUint(opts.queryId ?? 0, 64)
+              .storeCoins(opts.amount)
+              .storeAddress(opts.responseAddress)
+              .storeAddress(opts.responseAddress)
+              .endCell(),
         });
     }
 
     async sendReinvest(
-        provider: ContractProvider,
-        via: Sender,
-        opts: {
-            value: bigint;
-            totalReward: bigint;
-            amountToSwap: bigint;
-            swapLimit: bigint;
-            depositLimit: bigint;
-            tonTargetBalance: bigint;
-            depositFee: bigint;
-            depositFwdFee: bigint;
-            transferFee: bigint;
-            jettonTargetBalance: bigint;
-            deadline: number;
-            queryId?: number;
-        },
+      provider: ContractProvider,
+      via: Sender,
+      opts: {
+          value: bigint;
+          totalReward: bigint;
+          amountToSwap: bigint;
+          swapLimit: bigint;
+          depositLimit: bigint;
+          tonTargetBalance: bigint;
+          depositFee: bigint;
+          depositFwdFee: bigint;
+          transferFee: bigint;
+          jettonTargetBalance: bigint;
+          deadline: number;
+          queryId?: number;
+      },
     ) {
         if (opts.amountToSwap > 0) {
             return provider.internal(via, {
                 value: opts.value,
                 sendMode: SendMode.PAY_GAS_SEPARATELY,
                 body: beginCell()
-                    .storeUint(Vault.OPS.reinvest, 32)
-                    .storeUint(opts.queryId ?? 0, 64)
-                    .storeCoins(opts.totalReward)
-                    .storeCoins(opts.amountToSwap)
-                    .storeCoins(opts.swapLimit)
-                    .storeUint(opts.deadline, 32)
-                    .storeCoins(opts.tonTargetBalance)
-                    .storeCoins(opts.jettonTargetBalance)
-                    .storeCoins(opts.depositFee)
-                    .storeCoins(opts.depositFwdFee)
-                    .storeCoins(opts.transferFee)
-                    .storeRef(beginCell().storeCoins(opts.depositLimit).endCell())
-                    .endCell(),
+                  .storeUint(Vault.OPS.reinvest, 32)
+                  .storeUint(opts.queryId ?? 0, 64)
+                  .storeCoins(opts.totalReward)
+                  .storeCoins(opts.amountToSwap)
+                  .storeCoins(opts.swapLimit)
+                  .storeUint(opts.deadline, 32)
+                  .storeCoins(opts.tonTargetBalance)
+                  .storeCoins(opts.jettonTargetBalance)
+                  .storeCoins(opts.depositFee)
+                  .storeCoins(opts.depositFwdFee)
+                  .storeCoins(opts.transferFee)
+                  .storeRef(beginCell().storeCoins(opts.depositLimit).endCell())
+                  .endCell(),
             });
         } else {
             return provider.internal(via, {
                 value: opts.value,
                 sendMode: SendMode.PAY_GAS_SEPARATELY,
                 body: beginCell()
-                    .storeUint(Vault.OPS.reinvest, 32)
-                    .storeUint(opts.queryId ?? 0, 64)
-                    .storeCoins(opts.totalReward)
-                    .storeCoins(opts.amountToSwap)
-                    .storeCoins(opts.tonTargetBalance)
-                    .storeCoins(opts.jettonTargetBalance)
-                    .storeCoins(opts.depositFee)
-                    .storeCoins(opts.depositFwdFee)
-                    .storeCoins(opts.transferFee)
-                    .storeRef(beginCell().storeCoins(opts.depositLimit).endCell())
-                    .endCell(),
+                  .storeUint(Vault.OPS.reinvest, 32)
+                  .storeUint(opts.queryId ?? 0, 64)
+                  .storeCoins(opts.totalReward)
+                  .storeCoins(opts.amountToSwap)
+                  .storeCoins(opts.tonTargetBalance)
+                  .storeCoins(opts.jettonTargetBalance)
+                  .storeCoins(opts.depositFee)
+                  .storeCoins(opts.depositFwdFee)
+                  .storeCoins(opts.transferFee)
+                  .storeRef(beginCell().storeCoins(opts.depositLimit).endCell())
+                  .endCell(),
             });
         }
     }
 
-    async sendRefundRewards(
-        provider: ContractProvider,
-        via: Sender,
-        opts: {
-            value: bigint;
-            queryId?: number;
-        },
+    async sendInit(
+      provider: ContractProvider,
+      via: Sender,
+      opts: {
+          value: bigint;
+          depositLpWalletAddress: Address;
+          queryId?: number;
+      },
     ) {
         return provider.internal(via, {
             value: opts.value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                .storeUint(Vault.OPS.refund_rewards, 32)
-                .storeUint(opts.queryId ?? 0, 64)
-                .endCell(),
+              .storeUint(Vault.OPS.init, 32)
+              .storeUint(opts.queryId ?? 0, 64)
+              .storeAddress(opts.depositLpWalletAddress)
+              .endCell(),
+        });
+    }
+
+    async sendCancelAdminUpgrade(
+      provider: ContractProvider,
+      via: Sender,
+      opts: {
+          value: bigint;
+          queryId?: number;
+      },
+    ) {
+        return provider.internal(via, {
+            value: opts.value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: beginCell()
+              .storeUint(Vault.OPS.cancel_admin_upgrade, 32)
+              .storeUint(opts.queryId ?? 0, 64)
+              .endCell(),
+        });
+    }
+
+    async sendCancelCodeUpgrade(
+      provider: ContractProvider,
+      via: Sender,
+      opts: {
+          value: bigint;
+          queryId?: number;
+      },
+    ) {
+        return provider.internal(via, {
+            value: opts.value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: beginCell()
+              .storeUint(Vault.OPS.cancel_code_upgrade, 32)
+              .storeUint(opts.queryId ?? 0, 64)
+              .endCell(),
+        });
+    }
+
+    async sendWithdrawJettons(
+      provider: ContractProvider,
+      via: Sender,
+      opts: {
+          value: bigint;
+          walletAddress: Address;
+          receiverAddress: Address;
+          amount: bigint;
+          queryId?: number;
+      },
+    ) {
+        return provider.internal(via, {
+            value: opts.value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: beginCell()
+              .storeUint(Vault.OPS.withdraw_jettons, 32)
+              .storeUint(opts.queryId ?? 0, 64)
+              .storeAddress(opts.walletAddress)
+              .storeAddress(opts.receiverAddress)
+              .storeCoins(opts.amount)
+              .endCell(),
+        });
+    }
+
+    async sendRefundRewards(
+      provider: ContractProvider,
+      via: Sender,
+      opts: {
+          value: bigint;
+          queryId?: number;
+      },
+    ) {
+        return provider.internal(via, {
+            value: opts.value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: beginCell()
+              .storeUint(Vault.OPS.refund_rewards, 32)
+              .storeUint(opts.queryId ?? 0, 64)
+              .endCell(),
         });
     }
 
@@ -252,145 +340,145 @@ export class Vault implements Contract {
         return {
             endCode: slice.loadUint(64),
             endAdmin: slice.loadUint(64),
-            admin: slice.loadAddress(),
+            admin: slice.loadAddressAny(),
             code: slice.loadRef(),
         };
     }
 
     async sendSetStrategyAddress(
-        provider: ContractProvider,
-        via: Sender,
-        opts: {
-            value: bigint;
-            strategyAddress: Address;
-            queryId?: number;
-        },
+      provider: ContractProvider,
+      via: Sender,
+      opts: {
+          value: bigint;
+          strategyAddress: Address;
+          queryId?: number;
+      },
     ) {
         return provider.internal(via, {
             value: opts.value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                .storeUint(Vault.OPS.set_strategy_address, 32)
-                .storeUint(opts.queryId ?? 0, 64)
-                .storeAddress(opts.strategyAddress)
-                .endCell(),
+              .storeUint(Vault.OPS.set_strategy_address, 32)
+              .storeUint(opts.queryId ?? 0, 64)
+              .storeAddress(opts.strategyAddress)
+              .endCell(),
         });
     }
     async sendWithdrawManagementFee(
-        provider: ContractProvider,
-        via: Sender,
-        opts: {
-            value: bigint;
-            receiver: Address;
-            amount: bigint;
-            queryId?: number;
-        },
+      provider: ContractProvider,
+      via: Sender,
+      opts: {
+          value: bigint;
+          receiver: Address;
+          amount: bigint;
+          queryId?: number;
+      },
     ) {
         return provider.internal(via, {
             value: opts.value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                .storeUint(Vault.OPS.withdraw_management_fee, 32)
-                .storeUint(opts.queryId ?? 0, 64)
-                .storeAddress(opts.receiver)
-                .storeCoins(opts.amount)
-                .endCell(),
+              .storeUint(Vault.OPS.withdraw_management_fee, 32)
+              .storeUint(opts.queryId ?? 0, 64)
+              .storeAddress(opts.receiver)
+              .storeCoins(opts.amount)
+              .endCell(),
         });
     }
     async sendSetIsLocked(
-        provider: ContractProvider,
-        via: Sender,
-        opts: {
-            value: bigint;
-            isLocked: number;
-            queryId?: number;
-        },
+      provider: ContractProvider,
+      via: Sender,
+      opts: {
+          value: bigint;
+          isLocked: number;
+          queryId?: number;
+      },
     ) {
         return provider.internal(via, {
             value: opts.value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                .storeUint(Vault.OPS.set_is_locked, 32)
-                .storeUint(opts.queryId ?? 0, 64)
-                .storeUint(opts.isLocked, 1)
-                .endCell(),
+              .storeUint(Vault.OPS.set_is_locked, 32)
+              .storeUint(opts.queryId ?? 0, 64)
+              .storeUint(opts.isLocked, 1)
+              .endCell(),
         });
     }
     async sendFinalizeUpgrades(
-        provider: ContractProvider,
-        via: Sender,
-        opts: {
-            value: bigint;
-            queryId?: number;
-        },
+      provider: ContractProvider,
+      via: Sender,
+      opts: {
+          value: bigint;
+          queryId?: number;
+      },
     ) {
         return provider.internal(via, {
             value: opts.value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                .storeUint(Vault.OPS.finalize_upgrades, 32)
-                .storeUint(opts.queryId ?? 0, 64)
-                .endCell(),
+              .storeUint(Vault.OPS.finalize_upgrades, 32)
+              .storeUint(opts.queryId ?? 0, 64)
+              .endCell(),
         });
     }
 
     async sendInitCodeUpgrade(
-        provider: ContractProvider,
-        via: Sender,
-        opts: {
-            value: bigint;
-            code: Cell;
-            queryId?: number;
-        },
+      provider: ContractProvider,
+      via: Sender,
+      opts: {
+          value: bigint;
+          code: Cell;
+          queryId?: number;
+      },
     ) {
         return provider.internal(via, {
             value: opts.value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                .storeUint(Vault.OPS.init_code_upgrade, 32)
-                .storeUint(opts.queryId ?? 0, 64)
-                .storeRef(opts.code)
-                .endCell(),
+              .storeUint(Vault.OPS.init_code_upgrade, 32)
+              .storeUint(opts.queryId ?? 0, 64)
+              .storeRef(opts.code)
+              .endCell(),
         });
     }
 
     async sendInitAdminUpgrade(
-        provider: ContractProvider,
-        via: Sender,
-        opts: {
-            value: bigint;
-            admin: Address;
-            queryId?: number;
-        },
+      provider: ContractProvider,
+      via: Sender,
+      opts: {
+          value: bigint;
+          admin: Address;
+          queryId?: number;
+      },
     ) {
         return provider.internal(via, {
             value: opts.value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                .storeUint(Vault.OPS.init_admin_upgrade, 32)
-                .storeUint(opts.queryId ?? 0, 64)
-                .storeAddress(opts.admin)
-                .endCell(),
+              .storeUint(Vault.OPS.init_admin_upgrade, 32)
+              .storeUint(opts.queryId ?? 0, 64)
+              .storeAddress(opts.admin)
+              .endCell(),
         });
     }
 
     async sendSetManagementFeeRate(
-        provider: ContractProvider,
-        via: Sender,
-        opts: {
-            value: bigint;
-            managementFeeRate: bigint;
-            queryId?: number;
-        },
+      provider: ContractProvider,
+      via: Sender,
+      opts: {
+          value: bigint;
+          managementFeeRate: bigint;
+          queryId?: number;
+      },
     ) {
         return provider.internal(via, {
             value: opts.value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                .storeUint(Vault.OPS.set_management_fee_rate, 32)
-                .storeUint(opts.queryId ?? 0, 64)
-                .storeUint(opts.managementFeeRate, 16)
-                .endCell(),
+              .storeUint(Vault.OPS.set_management_fee_rate, 32)
+              .storeUint(opts.queryId ?? 0, 64)
+              .storeUint(opts.managementFeeRate, 16)
+              .endCell(),
         });
     }
 

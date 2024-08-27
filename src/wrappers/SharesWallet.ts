@@ -9,11 +9,11 @@ export type SharesWalletConfig = {
 
 export function sharesWalletConfigToCell(config: SharesWalletConfig): Cell {
     return beginCell()
-        .storeCoins(config.balance)
-        .storeAddress(config.ownerAddress)
-        .storeAddress(config.jettonMasterAddress)
-        .storeRef(config.jettonWalletCode)
-        .endCell();
+      .storeCoins(config.balance)
+      .storeAddress(config.ownerAddress)
+      .storeAddress(config.jettonMasterAddress)
+      .storeRef(config.jettonWalletCode)
+      .endCell();
 }
 
 export interface SharesWalletFees {
@@ -21,6 +21,12 @@ export interface SharesWalletFees {
     internalTransferFee: bigint;
     burnFee: bigint;
 }
+
+// export const Opcodes = {
+//     transfer: 0xf8a7ea5,
+//     internal_transfer: 0x178d4519,
+//     burn: 0x595f07bc,
+// };
 
 export class SharesWallet implements Contract {
     static readonly OPS = {
@@ -30,8 +36,8 @@ export class SharesWallet implements Contract {
     };
 
     constructor(
-        readonly address: Address,
-        readonly init?: { code: Cell; data: Cell },
+      readonly address: Address,
+      readonly init?: { code: Cell; data: Cell },
     ) {}
 
     static createFromAddress(address: Address) {
@@ -53,29 +59,29 @@ export class SharesWallet implements Contract {
     }
 
     async sendTransfer(
-        provider: ContractProvider,
-        via: Sender,
-        opts: {
-            value: bigint;
-            queryId?: number | bigint;
-            destination: Address;
-            amount: bigint;
-            responseAddress?: Address | null;
-            customPayload?: Cell;
-            forwardAmount?: bigint;
-            forwardPayload?: Cell;
-        },
+      provider: ContractProvider,
+      via: Sender,
+      opts: {
+          value: bigint;
+          queryId?: number | bigint;
+          destination: Address;
+          amount: bigint;
+          responseAddress?: Address | null;
+          customPayload?: Cell;
+          forwardAmount?: bigint;
+          forwardPayload?: Cell;
+      },
     ) {
         const body = beginCell()
-            .storeUint(SharesWallet.OPS.transfer, 32)
-            .storeUint(opts.queryId ?? 0, 64)
-            .storeCoins(opts.amount)
-            .storeAddress(opts.destination)
-            .storeAddress(opts.responseAddress)
-            .storeMaybeRef(opts.customPayload)
-            .storeCoins(opts.forwardAmount ?? 0)
-            .storeMaybeRef(opts.forwardPayload)
-            .endCell();
+          .storeUint(SharesWallet.OPS.transfer, 32)
+          .storeUint(opts.queryId ?? 0, 64)
+          .storeCoins(opts.amount)
+          .storeAddress(opts.destination)
+          .storeAddress(opts.responseAddress)
+          .storeMaybeRef(opts.customPayload)
+          .storeCoins(opts.forwardAmount ?? 0)
+          .storeMaybeRef(opts.forwardPayload)
+          .endCell();
 
         return provider.internal(via, {
             value: opts.value,
@@ -85,23 +91,23 @@ export class SharesWallet implements Contract {
     }
 
     async sendBurn(
-        provider: ContractProvider,
-        via: Sender,
-        opts: {
-            value: bigint;
-            queryId?: number | bigint;
-            amount: bigint;
-            responseAddress?: Address | null;
-            customPayload?: Cell;
-        },
+      provider: ContractProvider,
+      via: Sender,
+      opts: {
+          value: bigint;
+          queryId?: number | bigint;
+          amount: bigint;
+          responseAddress?: Address | null;
+          customPayload?: Cell;
+      },
     ) {
         const body = beginCell()
-            .storeUint(SharesWallet.OPS.burn, 32)
-            .storeUint(opts.queryId ?? 0, 64)
-            .storeCoins(opts.amount)
-            .storeAddress(opts.responseAddress)
-            .storeMaybeRef(opts.customPayload)
-            .endCell();
+          .storeUint(SharesWallet.OPS.burn, 32)
+          .storeUint(opts.queryId ?? 0, 64)
+          .storeCoins(opts.amount)
+          .storeAddress(opts.responseAddress)
+          .storeMaybeRef(opts.customPayload)
+          .endCell();
 
         return provider.internal(via, {
             value: opts.value,

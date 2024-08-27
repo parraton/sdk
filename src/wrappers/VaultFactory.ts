@@ -17,19 +17,19 @@ export const Opcodes = {
 };
 export function vaultFactoryConfigToCell(config: VaultFactoryConfig): Cell {
     return beginCell()
-        .storeAddress(config.adminAddress)
-        .storeAddress(config.managerAddress)
-        .storeRef(config.strategyCode)
-        .storeRef(config.vaultCode)
-        .storeRef(config.sharesWalletCode)
-        .storeRef(VaultFactory.packInitTempUpgrade())
-        .endCell();
+      .storeAddress(config.adminAddress)
+      .storeAddress(config.managerAddress)
+      .storeRef(config.strategyCode)
+      .storeRef(config.vaultCode)
+      .storeRef(config.sharesWalletCode)
+      .storeRef(VaultFactory.packInitTempUpgrade())
+      .endCell();
 }
 
 export class VaultFactory implements Contract {
     constructor(
-        readonly address: Address,
-        readonly init?: { code: Cell; data: Cell },
+      readonly address: Address,
+      readonly init?: { code: Cell; data: Cell },
     ) {}
 
     static createFromAddress(address: Address) {
@@ -51,63 +51,63 @@ export class VaultFactory implements Contract {
     }
 
     async sendCreateVault(
-        provider: ContractProvider,
-        via: Sender,
-        opts: {
-            value: bigint;
-            distributionPoolAddress: Address;
-            managementFeeRate: bigint;
-            adminAddress: Address;
-            managerAddress: Address;
-            queryId?: number;
-        },
+      provider: ContractProvider,
+      via: Sender,
+      opts: {
+          value: bigint;
+          distributionPoolAddress: Address;
+          managementFeeRate: bigint;
+          adminAddress: Address;
+          managerAddress: Address;
+          queryId?: number;
+      },
     ) {
         return provider.internal(via, {
             value: opts.value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                .storeUint(Opcodes.create_vault, 32)
-                .storeUint(opts.queryId ?? 0, 64)
-                .storeAddress(opts.distributionPoolAddress)
-                .storeCoins(opts.managementFeeRate)
-                .storeAddress(opts.adminAddress)
-                .storeAddress(opts.managerAddress)
-                .endCell(),
+              .storeUint(Opcodes.create_vault, 32)
+              .storeUint(opts.queryId ?? 0, 64)
+              .storeAddress(opts.distributionPoolAddress)
+              .storeCoins(opts.managementFeeRate)
+              .storeAddress(opts.adminAddress)
+              .storeAddress(opts.managerAddress)
+              .endCell(),
         });
     }
     async sendCreateStrategy(
-        provider: ContractProvider,
-        via: Sender,
-        opts: {
-            value: bigint;
-            vaultAddress: Address;
-            jettonMasterAddress: Address;
-            poolAddress: Address;
-            poolType: number;
-            adminAddress: Address;
-            jettonVaultAddress: Address;
-            nativeVaultAddress: Address;
-            queryId?: number;
-        },
+      provider: ContractProvider,
+      via: Sender,
+      opts: {
+          value: bigint;
+          vaultAddress: Address;
+          jettonMasterAddress: Address;
+          poolAddress: Address;
+          poolType: number;
+          adminAddress: Address;
+          jettonVaultAddress: Address;
+          nativeVaultAddress: Address;
+          queryId?: number;
+      },
     ) {
         return provider.internal(via, {
             value: opts.value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                .storeUint(Opcodes.create_strategy, 32)
-                .storeUint(opts.queryId ?? 0, 64)
-                .storeAddress(opts.vaultAddress)
-                .storeAddress(opts.jettonMasterAddress)
-                .storeAddress(opts.poolAddress)
-                .storeUint(opts.poolType, 1)
-                .storeRef(
-                    beginCell()
-                        .storeAddress(opts.adminAddress)
-                        .storeAddress(opts.jettonVaultAddress)
-                        .storeAddress(opts.nativeVaultAddress)
-                        .endCell(),
-                )
-                .endCell(),
+              .storeUint(Opcodes.create_strategy, 32)
+              .storeUint(opts.queryId ?? 0, 64)
+              .storeAddress(opts.vaultAddress)
+              .storeAddress(opts.jettonMasterAddress)
+              .storeAddress(opts.poolAddress)
+              .storeUint(opts.poolType, 1)
+              .storeRef(
+                beginCell()
+                  .storeAddress(opts.adminAddress)
+                  .storeAddress(opts.jettonVaultAddress)
+                  .storeAddress(opts.nativeVaultAddress)
+                  .endCell(),
+              )
+              .endCell(),
         });
     }
 
@@ -126,62 +126,62 @@ export class VaultFactory implements Contract {
     }
 
     async sendCreateAll(
-        provider: ContractProvider,
-        via: Sender,
-        opts: {
-            value: bigint;
-            distributionPoolAddress: Address;
-            managementFeeRate: bigint;
-            jettonMasterAddress: Address;
-            poolAddress: Address;
-            poolType: number;
-            adminAddress: Address;
-            managerAddress: Address;
-            jettonVaultAddress: Address;
-            nativeVaultAddress: Address;
-            vaultLpWalletAddress: Address;
-            strategyLpWalletAddress: Address;
-            strategyJettonWalletAddress: Address;
-            fwdFee: bigint;
-            queryId?: number;
-        },
+      provider: ContractProvider,
+      via: Sender,
+      opts: {
+          value: bigint;
+          distributionPoolAddress: Address;
+          managementFeeRate: bigint;
+          jettonMasterAddress: Address;
+          poolAddress: Address;
+          poolType: number;
+          adminAddress: Address;
+          managerAddress: Address;
+          jettonVaultAddress: Address;
+          nativeVaultAddress: Address;
+          vaultLpWalletAddress: Address;
+          strategyLpWalletAddress: Address;
+          strategyJettonWalletAddress: Address;
+          fwdFee: bigint;
+          queryId?: number;
+      },
     ) {
         return provider.internal(via, {
             value: opts.value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                .storeUint(Opcodes.create_all, 32)
-                .storeUint(opts.queryId ?? 0, 64)
-                .storeAddress(opts.distributionPoolAddress)
-                .storeAddress(opts.adminAddress)
-                .storeAddress(opts.managerAddress)
-                .storeUint(opts.managementFeeRate, 16)
-                .storeRef(
-                    beginCell()
-                        .storeAddress(opts.jettonMasterAddress)
-                        .storeAddress(opts.jettonVaultAddress)
-                        .storeAddress(opts.poolAddress)
-                        .storeUint(opts.poolType, 1)
-                        .endCell(),
-                )
-                .storeRef(
-                    beginCell()
-                        .storeAddress(opts.nativeVaultAddress)
-                        .storeAddress(opts.vaultLpWalletAddress)
-                        .storeAddress(opts.strategyLpWalletAddress)
-                        .endCell(),
-                )
-                .storeRef(beginCell().storeAddress(opts.strategyJettonWalletAddress).storeCoins(opts.fwdFee).endCell())
-                .endCell(),
+              .storeUint(Opcodes.create_all, 32)
+              .storeUint(opts.queryId ?? 0, 64)
+              .storeAddress(opts.distributionPoolAddress)
+              .storeAddress(opts.adminAddress)
+              .storeAddress(opts.managerAddress)
+              .storeUint(opts.managementFeeRate, 16)
+              .storeRef(
+                beginCell()
+                  .storeAddress(opts.jettonMasterAddress)
+                  .storeAddress(opts.jettonVaultAddress)
+                  .storeAddress(opts.poolAddress)
+                  .storeUint(opts.poolType, 1)
+                  .endCell(),
+              )
+              .storeRef(
+                beginCell()
+                  .storeAddress(opts.nativeVaultAddress)
+                  .storeAddress(opts.vaultLpWalletAddress)
+                  .storeAddress(opts.strategyLpWalletAddress)
+                  .endCell(),
+              )
+              .storeRef(beginCell().storeAddress(opts.strategyJettonWalletAddress).storeCoins(opts.fwdFee).endCell())
+              .endCell(),
         });
     }
 
     async getVaultAddress(
-        provider: ContractProvider,
-        distributionPoolAddress: Address,
-        managementFeeRate: bigint,
-        adminAddress: Address,
-        managerAddress: Address,
+      provider: ContractProvider,
+      distributionPoolAddress: Address,
+      managementFeeRate: bigint,
+      adminAddress: Address,
+      managerAddress: Address,
     ): Promise<Address> {
         const result = await provider.get('get_vault_address', [
             {
@@ -210,14 +210,14 @@ export class VaultFactory implements Contract {
     // }
 
     async getStrategyAddress(
-        provider: ContractProvider,
-        vaultAddress: Address,
-        jettonMasterAddress: Address,
-        poolAddress: Address,
-        poolType: number,
-        adminAddress: Address,
-        jettonVaultAddress: Address,
-        nativeVaultAddress: Address,
+      provider: ContractProvider,
+      vaultAddress: Address,
+      jettonMasterAddress: Address,
+      poolAddress: Address,
+      poolType: number,
+      adminAddress: Address,
+      jettonVaultAddress: Address,
+      nativeVaultAddress: Address,
     ): Promise<Address> {
         const result = await provider.get('get_strategy_address', [
             {
