@@ -10,64 +10,79 @@ import {
   SendMode,
 } from "@ton/core";
 
-export type TonJettonTonStrategyConfig = {
+export type JettonJettonTonStrategyConfig = {
   vaultAddress: Address;
+  usdtMasterAddress: Address;
   jettonMasterAddress: Address;
-  poolAddress: Address;
   poolType: number;
+  poolAddress: Address;
   depositLpWalletAddress: Address;
-  jettonWalletAddress: Address;
   adminAddress: Address;
+  usdtVaultAddress: Address;
   jettonVaultAddress: Address;
   nativeVaultAddress: Address;
+  usdtWalletAddress: Address;
+  jettonWalletAddress: Address;
+  usdtTonPoolAddress: Address;
   tempUpgrade: Cell;
 };
 
-export type TjtReinvestParams = {
-  amountToSwap: bigint;
-  swapLimit: bigint;
+export type JjtReinvestParams = {
+  amountToSwap0?: bigint;
+  amountToSwap1?: bigint;
+  swap0Limit?: bigint;
+  swap1Limit?: bigint;
+  swapFwdFee?: bigint;
   depositLimit: bigint;
-  tonTargetBalance: bigint;
+  usdtTargetBalance: bigint;
+  jettonTargetBalance: bigint;
   depositFee: bigint;
   depositFwdFee: bigint;
   transferFee: bigint;
-  jettonTargetBalance: bigint;
-  deadline: number;
+  deadline?: number;
 };
 
-export interface TonJettonTonStrategyFees {
+export interface JettonJettonTonStrategyFees {
   transferFee: bigint;
   excessFee: bigint;
   transferNotificationFee: bigint;
   reinvestFee: bigint;
 }
 
-export function tonJettonTonStrategyConfigToCell(
-  config: TonJettonTonStrategyConfig
+export function jettonJettonTonStrategyConfigToCell(
+  config: JettonJettonTonStrategyConfig
 ): Cell {
   return beginCell()
     .storeAddress(config.vaultAddress)
+    .storeAddress(config.usdtMasterAddress)
     .storeAddress(config.jettonMasterAddress)
-    .storeAddress(config.poolAddress)
     .storeUint(config.poolType, 1)
     .storeRef(
       beginCell()
+        .storeAddress(config.poolAddress)
         .storeAddress(config.depositLpWalletAddress)
-        .storeAddress(config.jettonWalletAddress)
         .storeAddress(config.adminAddress)
         .endCell()
     )
     .storeRef(
       beginCell()
+        .storeAddress(config.usdtVaultAddress)
         .storeAddress(config.jettonVaultAddress)
         .storeAddress(config.nativeVaultAddress)
+        .endCell()
+    )
+    .storeRef(
+      beginCell()
+        .storeAddress(config.usdtWalletAddress)
+        .storeAddress(config.jettonWalletAddress)
+        .storeAddress(config.usdtTonPoolAddress)
         .endCell()
     )
     .storeRef(config.tempUpgrade)
     .endCell();
 }
 
-export class TonJettonTonStrategy implements Contract {
+export class JettonJettonTonStrategy implements Contract {
   static readonly OPS = {
     transfer_notification: 0x7362d09c,
     internal_transfer: 0x178d4519,
@@ -117,18 +132,52 @@ export class TonJettonTonStrategy implements Contract {
     };
   }
 
+  packReinvestData(opts: JjtReinvestParams): Builder {
+    const builder = beginCell();
+    if (opts.amountToSwap0 && opts.deadline) {
+      builder.storeMaybeRef(
+        beginCell()
+          .storeCoins(opts.amountToSwap0)
+          .storeCoins(opts.swap0Limit || 0n)
+          .storeUint(opts.deadline, 32)
+          .endCell()
+      );
+    }
+    if (opts.amountToSwap1 && opts.deadline && opts.swapFwdFee) {
+      builder.storeMaybeRef(
+        beginCell()
+          .storeCoins(opts.amountToSwap1)
+          .storeCoins(opts.swap1Limit || 0n)
+          .storeUint(opts.deadline, 32)
+          .storeCoins(opts.swapFwdFee)
+          .endCell()
+      );
+    }
+    builder.storeRef(
+      beginCell()
+        .storeCoins(opts.usdtTargetBalance)
+        .storeCoins(opts.jettonTargetBalance)
+        .storeCoins(opts.depositFee)
+        .storeCoins(opts.depositFwdFee)
+        .storeCoins(opts.transferFee)
+        .storeCoins(opts.depositLimit)
+        .endCell()
+    );
+    return builder;
+  }
+
   static createFromAddress(address: Address) {
-    return new TonJettonTonStrategy(address);
+    return new JettonJettonTonStrategy(address);
   }
 
   static createFromConfig(
-    config: TonJettonTonStrategyConfig,
+    config: JettonJettonTonStrategyConfig,
     code: Cell,
     workchain = 0
   ) {
-    const data = tonJettonTonStrategyConfigToCell(config);
+    const data = jettonJettonTonStrategyConfigToCell(config);
     const init = { code, data };
-    return new TonJettonTonStrategy(contractAddress(workchain, init), init);
+    return new JettonJettonTonStrategy(contractAddress(workchain, init), init);
   }
 
   async sendDeploy(provider: ContractProvider, via: Sender, value: bigint) {
@@ -153,36 +202,12 @@ export class TonJettonTonStrategy implements Contract {
       value: opts.value,
       sendMode: SendMode.PAY_GAS_SEPARATELY,
       body: beginCell()
-        .storeUint(TonJettonTonStrategy.OPS.init, 32)
+        .storeUint(JettonJettonTonStrategy.OPS.init, 32)
         .storeUint(opts.queryId ?? 0, 64)
         .storeAddress(opts.depositLpWalletAddress)
         .storeAddress(opts.jettonWalletAddress)
         .endCell(),
     });
-  }
-
-  packReinvestData(opts: TjtReinvestParams): Builder {
-    if (opts.amountToSwap > 0) {
-      return beginCell()
-        .storeCoins(opts.amountToSwap)
-        .storeCoins(opts.swapLimit)
-        .storeUint(opts.deadline, 32)
-        .storeCoins(opts.tonTargetBalance)
-        .storeCoins(opts.jettonTargetBalance)
-        .storeCoins(opts.depositFee)
-        .storeCoins(opts.depositFwdFee)
-        .storeCoins(opts.transferFee)
-        .storeRef(beginCell().storeCoins(opts.depositLimit).endCell());
-    } else {
-      return beginCell()
-        .storeCoins(opts.amountToSwap)
-        .storeCoins(opts.tonTargetBalance)
-        .storeCoins(opts.jettonTargetBalance)
-        .storeCoins(opts.depositFee)
-        .storeCoins(opts.depositFwdFee)
-        .storeCoins(opts.transferFee)
-        .storeRef(beginCell().storeCoins(opts.depositLimit).endCell());
-    }
   }
 
   async sendWithdrawJettons(
@@ -200,7 +225,7 @@ export class TonJettonTonStrategy implements Contract {
       value: opts.value,
       sendMode: SendMode.PAY_GAS_SEPARATELY,
       body: beginCell()
-        .storeUint(TonJettonTonStrategy.OPS.withdraw_jettons, 32)
+        .storeUint(JettonJettonTonStrategy.OPS.withdraw_jettons, 32)
         .storeUint(opts.queryId ?? 0, 64)
         .storeAddress(opts.walletAddress)
         .storeAddress(opts.receiverAddress)
@@ -227,7 +252,7 @@ export class TonJettonTonStrategy implements Contract {
       value: opts.value,
       sendMode: SendMode.PAY_GAS_SEPARATELY,
       body: beginCell()
-        .storeUint(TonJettonTonStrategy.OPS.reinvest, 32)
+        .storeUint(JettonJettonTonStrategy.OPS.reinvest, 32)
         .storeUint(opts.queryId ?? 0, 64)
         .storeCoins(opts.totalReward)
         .storeCoins(opts.amountToSwap)
@@ -241,21 +266,26 @@ export class TonJettonTonStrategy implements Contract {
 
   async getStrategyData(
     provider: ContractProvider
-  ): Promise<TonJettonTonStrategyConfig> {
+  ): Promise<JettonJettonTonStrategyConfig> {
     const result = await provider.get("get_strategy_data", []);
     return {
       vaultAddress: result.stack.readAddress(),
+      usdtMasterAddress: result.stack.readAddress(),
       jettonMasterAddress: result.stack.readAddress(),
-      poolAddress: result.stack.readAddress(),
       poolType: result.stack.readNumber(),
+      poolAddress: result.stack.readAddress(),
       depositLpWalletAddress: result.stack.readAddress(),
-      jettonWalletAddress: result.stack.readAddress(),
       adminAddress: result.stack.readAddress(),
+      usdtVaultAddress: result.stack.readAddress(),
       jettonVaultAddress: result.stack.readAddress(),
       nativeVaultAddress: result.stack.readAddress(),
+      usdtWalletAddress: result.stack.readAddress(),
+      jettonWalletAddress: result.stack.readAddress(),
+      usdtTonPoolAddress: result.stack.readAddress(),
       tempUpgrade: result.stack.readCell(),
     };
   }
+
   async sendFinalizeUpgrades(
     provider: ContractProvider,
     via: Sender,
@@ -268,7 +298,7 @@ export class TonJettonTonStrategy implements Contract {
       value: opts.value,
       sendMode: SendMode.PAY_GAS_SEPARATELY,
       body: beginCell()
-        .storeUint(TonJettonTonStrategy.OPS.finalize_upgrades, 32)
+        .storeUint(JettonJettonTonStrategy.OPS.finalize_upgrades, 32)
         .storeUint(opts.queryId ?? 0, 64)
         .endCell(),
     });
@@ -287,7 +317,7 @@ export class TonJettonTonStrategy implements Contract {
       value: opts.value,
       sendMode: SendMode.PAY_GAS_SEPARATELY,
       body: beginCell()
-        .storeUint(TonJettonTonStrategy.OPS.init_code_upgrade, 32)
+        .storeUint(JettonJettonTonStrategy.OPS.init_code_upgrade, 32)
         .storeUint(opts.queryId ?? 0, 64)
         .storeRef(opts.code)
         .endCell(),
@@ -307,7 +337,7 @@ export class TonJettonTonStrategy implements Contract {
       value: opts.value,
       sendMode: SendMode.PAY_GAS_SEPARATELY,
       body: beginCell()
-        .storeUint(TonJettonTonStrategy.OPS.init_admin_upgrade, 32)
+        .storeUint(JettonJettonTonStrategy.OPS.init_admin_upgrade, 32)
         .storeUint(opts.queryId ?? 0, 64)
         .storeAddress(opts.admin)
         .endCell(),
@@ -326,7 +356,7 @@ export class TonJettonTonStrategy implements Contract {
       value: opts.value,
       sendMode: SendMode.PAY_GAS_SEPARATELY,
       body: beginCell()
-        .storeUint(TonJettonTonStrategy.OPS.cancel_admin_upgrade, 32)
+        .storeUint(JettonJettonTonStrategy.OPS.cancel_admin_upgrade, 32)
         .storeUint(opts.queryId ?? 0, 64)
         .endCell(),
     });
@@ -344,7 +374,7 @@ export class TonJettonTonStrategy implements Contract {
       value: opts.value,
       sendMode: SendMode.PAY_GAS_SEPARATELY,
       body: beginCell()
-        .storeUint(TonJettonTonStrategy.OPS.cancel_code_upgrade, 32)
+        .storeUint(JettonJettonTonStrategy.OPS.cancel_code_upgrade, 32)
         .storeUint(opts.queryId ?? 0, 64)
         .endCell(),
     });
