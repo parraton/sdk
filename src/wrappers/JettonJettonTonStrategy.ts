@@ -12,10 +12,10 @@ import {
 
 export type JettonJettonTonStrategyConfig = {
   vaultAddress: Address;
-  usdtMasterAddress: Address;
   jettonMasterAddress: Address;
-  poolType: number;
   poolAddress: Address;
+  poolType: number;
+  usdtMasterAddress: Address;
   depositLpWalletAddress: Address;
   adminAddress: Address;
   usdtVaultAddress: Address;
@@ -54,12 +54,12 @@ export function jettonJettonTonStrategyConfigToCell(
 ): Cell {
   return beginCell()
     .storeAddress(config.vaultAddress)
-    .storeAddress(config.usdtMasterAddress)
     .storeAddress(config.jettonMasterAddress)
+    .storeAddress(config.poolAddress)
     .storeUint(config.poolType, 1)
     .storeRef(
       beginCell()
-        .storeAddress(config.poolAddress)
+        .storeAddress(config.usdtMasterAddress)
         .storeAddress(config.depositLpWalletAddress)
         .storeAddress(config.adminAddress)
         .endCell()
@@ -134,25 +134,27 @@ export class JettonJettonTonStrategy implements Contract {
 
   packReinvestData(opts: JjtReinvestParams): Builder {
     const builder = beginCell();
-    if (opts.amountToSwap0 && opts.deadline) {
-      builder.storeMaybeRef(
-        beginCell()
-          .storeCoins(opts.amountToSwap0)
-          .storeCoins(opts.swap0Limit || 0n)
-          .storeUint(opts.deadline, 32)
-          .endCell()
-      );
-    }
-    if (opts.amountToSwap1 && opts.deadline && opts.swapFwdFee) {
-      builder.storeMaybeRef(
-        beginCell()
-          .storeCoins(opts.amountToSwap1)
-          .storeCoins(opts.swap1Limit || 0n)
-          .storeUint(opts.deadline, 32)
-          .storeCoins(opts.swapFwdFee)
-          .endCell()
-      );
-    }
+    builder.storeMaybeRef(
+      opts.amountToSwap0 && opts.deadline
+        ? beginCell()
+            .storeCoins(opts.amountToSwap0)
+            .storeCoins(opts.swap0Limit || 0n)
+            .storeUint(opts.deadline, 32)
+            .endCell()
+        : null
+    );
+
+    builder.storeMaybeRef(
+      opts.amountToSwap1 && opts.deadline && opts.swapFwdFee
+        ? beginCell()
+            .storeCoins(opts.amountToSwap1)
+            .storeCoins(opts.swap1Limit || 0n)
+            .storeUint(opts.deadline, 32)
+            .storeCoins(opts.swapFwdFee)
+            .endCell()
+        : null
+    );
+
     builder.storeRef(
       beginCell()
         .storeCoins(opts.usdtTargetBalance)
@@ -264,16 +266,23 @@ export class JettonJettonTonStrategy implements Contract {
     });
   }
 
+  async getStrategyPoolAddress(provider: ContractProvider): Promise<Address> {
+    const result = await provider.get("get_strategy_data", []);
+    result.stack.readAddress();
+    result.stack.readAddress();
+    return result.stack.readAddress();
+  }
+
   async getStrategyData(
     provider: ContractProvider
   ): Promise<JettonJettonTonStrategyConfig> {
     const result = await provider.get("get_strategy_data", []);
     return {
       vaultAddress: result.stack.readAddress(),
-      usdtMasterAddress: result.stack.readAddress(),
       jettonMasterAddress: result.stack.readAddress(),
-      poolType: result.stack.readNumber(),
       poolAddress: result.stack.readAddress(),
+      poolType: result.stack.readNumber(),
+      usdtMasterAddress: result.stack.readAddress(),
       depositLpWalletAddress: result.stack.readAddress(),
       adminAddress: result.stack.readAddress(),
       usdtVaultAddress: result.stack.readAddress(),

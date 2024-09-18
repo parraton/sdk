@@ -256,6 +256,14 @@ export class TonJettonTonStrategy implements Contract {
       tempUpgrade: result.stack.readCell(),
     };
   }
+
+  async getStrategyPoolAddress(provider: ContractProvider): Promise<Address> {
+    const result = await provider.get("get_strategy_data", []);
+    result.stack.readAddress();
+    result.stack.readAddress();
+    return result.stack.readAddress();
+  }
+
   async sendFinalizeUpgrades(
     provider: ContractProvider,
     via: Sender,

@@ -8,7 +8,7 @@ import {
   Sender,
   SendMode,
 } from "@ton/core";
-import { HOLE_ADDRESS } from "../constatns";
+import { HOLE_ADDRESS } from "../constants";
 
 export type VaultFactoryConfig = {
   adminAddress: Address;
@@ -19,11 +19,60 @@ export type VaultFactoryConfig = {
   tempUpgrade: Cell;
 };
 
+export type CreateJjtAllConfig = {
+  value: bigint;
+  distributionPoolAddress: Address;
+  managementFeeRate: bigint;
+  usdtMasterAddress: Address;
+  jettonMasterAddress: Address;
+  poolType: number;
+  poolAddress: Address;
+  adminAddress: Address;
+  managerAddress: Address;
+  usdtVaultAddress: Address;
+  jettonVaultAddress: Address;
+  nativeVaultAddress: Address;
+  usdtTonPoolAddress: Address;
+  vaultLpWalletAddress: Address;
+  strategyLpWalletAddress: Address;
+  strategyUsdtWalletAddress: Address;
+  strategyJettonWalletAddress: Address;
+  fwdFee: bigint;
+  queryId?: number;
+};
+
+export type CreateTjtAllConfig = {
+  value: bigint;
+  distributionPoolAddress: Address;
+  managementFeeRate: bigint;
+  jettonMasterAddress: Address;
+  poolAddress: Address;
+  poolType: number;
+  adminAddress: Address;
+  managerAddress: Address;
+  jettonVaultAddress: Address;
+  nativeVaultAddress: Address;
+  vaultLpWalletAddress: Address;
+  strategyLpWalletAddress: Address;
+  strategyJettonWalletAddress: Address;
+  fwdFee: bigint;
+  queryId?: number;
+};
+
 export const Opcodes = {
   create_vault: 0xcbdf3140,
-  create_strategy: 0x8a00e8d9,
-  create_all: 0x2493d509,
+  create_tjt_strategy: 0xd2b2749c,
+  create_tjt_all: 0x55796149,
+  create_jjt_strategy: 0x379b4a7e,
+  create_jjt_all: 0x629886da,
+  set_strategy_code: 0x43157f38,
+  cancel_admin_upgrade: 0xa4ed9981,
+  cancel_code_upgrade: 0x357ccc67,
+  init_code_upgrade: 0xdf1e233d,
+  init_admin_upgrade: 0x2fb94384,
+  finalize_upgrades: 0x6378509f,
 };
+
 export function vaultFactoryConfigToCell(config: VaultFactoryConfig): Cell {
   return beginCell()
     .storeAddress(config.adminAddress)
@@ -107,7 +156,7 @@ export class VaultFactory implements Contract {
       value: opts.value,
       sendMode: SendMode.PAY_GAS_SEPARATELY,
       body: beginCell()
-        .storeUint(Opcodes.create_strategy, 32)
+        .storeUint(Opcodes.create_tjt_strategy, 32)
         .storeUint(opts.queryId ?? 0, 64)
         .storeAddress(opts.vaultAddress)
         .storeAddress(opts.jettonMasterAddress)
@@ -143,32 +192,16 @@ export class VaultFactory implements Contract {
     };
   }
 
-  async sendCreateAll(
+  async sendCreateTjtAll(
     provider: ContractProvider,
     via: Sender,
-    opts: {
-      value: bigint;
-      distributionPoolAddress: Address;
-      managementFeeRate: bigint;
-      jettonMasterAddress: Address;
-      poolAddress: Address;
-      poolType: number;
-      adminAddress: Address;
-      managerAddress: Address;
-      jettonVaultAddress: Address;
-      nativeVaultAddress: Address;
-      vaultLpWalletAddress: Address;
-      strategyLpWalletAddress: Address;
-      strategyJettonWalletAddress: Address;
-      fwdFee: bigint;
-      queryId?: number;
-    }
+    opts: CreateTjtAllConfig
   ) {
     return provider.internal(via, {
       value: opts.value,
       sendMode: SendMode.PAY_GAS_SEPARATELY,
       body: beginCell()
-        .storeUint(Opcodes.create_all, 32)
+        .storeUint(Opcodes.create_tjt_all, 32)
         .storeUint(opts.queryId ?? 0, 64)
         .storeAddress(opts.distributionPoolAddress)
         .storeAddress(opts.adminAddress)
@@ -191,6 +224,54 @@ export class VaultFactory implements Contract {
         )
         .storeRef(
           beginCell()
+            .storeAddress(opts.strategyJettonWalletAddress)
+            .storeCoins(opts.fwdFee)
+            .endCell()
+        )
+        .endCell(),
+    });
+  }
+
+  async sendCreateJjtAll(
+    provider: ContractProvider,
+    via: Sender,
+    opts: CreateJjtAllConfig
+  ) {
+    return provider.internal(via, {
+      value: opts.value,
+      sendMode: SendMode.PAY_GAS_SEPARATELY,
+      body: beginCell()
+        .storeUint(Opcodes.create_jjt_all, 32)
+        .storeUint(opts.queryId ?? 0, 64)
+        .storeAddress(opts.distributionPoolAddress)
+        .storeAddress(opts.adminAddress)
+        .storeAddress(opts.managerAddress)
+        .storeUint(opts.managementFeeRate, 16)
+        .storeRef(
+          beginCell()
+            .storeAddress(opts.usdtMasterAddress)
+            .storeAddress(opts.jettonMasterAddress)
+            .storeAddress(opts.poolAddress)
+            .storeUint(opts.poolType, 1)
+            .endCell()
+        )
+        .storeRef(
+          beginCell()
+            .storeAddress(opts.usdtVaultAddress)
+            .storeAddress(opts.jettonVaultAddress)
+            .storeAddress(opts.nativeVaultAddress)
+            .endCell()
+        )
+        .storeRef(
+          beginCell()
+            .storeAddress(opts.usdtTonPoolAddress)
+            .storeAddress(opts.vaultLpWalletAddress)
+            .storeAddress(opts.strategyLpWalletAddress)
+            .endCell()
+        )
+        .storeRef(
+          beginCell()
+            .storeAddress(opts.strategyUsdtWalletAddress)
             .storeAddress(opts.strategyJettonWalletAddress)
             .storeCoins(opts.fwdFee)
             .endCell()
@@ -227,12 +308,7 @@ export class VaultFactory implements Contract {
     return result.stack.readAddress();
   }
 
-  // slice get_strategy_address(slice vault_address, slice jetton_master_address, slice pool_address, int pool_type, slice admin_address, slice jetton_vault_address, slice native_vault_address) method_id {
-  //     load_storage();
-  //     return calculate_strategy_address(calculate_strategy_state_init(vault_address, jetton_master_address, pool_address, pool_type, admin_address, jetton_vault_address, native_vault_address));
-  // }
-
-  async getStrategyAddress(
+  async getTjtStrategyAddress(
     provider: ContractProvider,
     vaultAddress: Address,
     jettonMasterAddress: Address,
@@ -242,7 +318,7 @@ export class VaultFactory implements Contract {
     jettonVaultAddress: Address,
     nativeVaultAddress: Address
   ): Promise<Address> {
-    const result = await provider.get("get_strategy_address", [
+    const result = await provider.get("get_tjt_strategy_address", [
       {
         type: "slice",
         cell: beginCell().storeAddress(vaultAddress).endCell(),
@@ -270,6 +346,64 @@ export class VaultFactory implements Contract {
       {
         type: "slice",
         cell: beginCell().storeAddress(nativeVaultAddress).endCell(),
+      },
+    ]);
+    return result.stack.readAddress();
+  }
+
+  async getJjtStrategyAddress(
+    provider: ContractProvider,
+    vaultAddress: Address,
+    jettonMasterAddress: Address,
+    poolAddress: Address,
+    poolType: number,
+    usdtMasterAddress: Address,
+    adminAddress: Address,
+    usdtVaultAddress: Address,
+    jettonVaultAddress: Address,
+    nativeVaultAddress: Address,
+    usdtTonPoolAddress: Address
+  ): Promise<Address> {
+    const result = await provider.get("get_jjt_strategy_address", [
+      {
+        type: "slice",
+        cell: beginCell().storeAddress(vaultAddress).endCell(),
+      },
+      {
+        type: "slice",
+        cell: beginCell().storeAddress(jettonMasterAddress).endCell(),
+      },
+      {
+        type: "slice",
+        cell: beginCell().storeAddress(poolAddress).endCell(),
+      },
+      {
+        type: "int",
+        value: BigInt(poolType),
+      },
+      {
+        type: "slice",
+        cell: beginCell().storeAddress(usdtMasterAddress).endCell(),
+      },
+      {
+        type: "slice",
+        cell: beginCell().storeAddress(adminAddress).endCell(),
+      },
+      {
+        type: "slice",
+        cell: beginCell().storeAddress(usdtVaultAddress).endCell(),
+      },
+      {
+        type: "slice",
+        cell: beginCell().storeAddress(jettonVaultAddress).endCell(),
+      },
+      {
+        type: "slice",
+        cell: beginCell().storeAddress(nativeVaultAddress).endCell(),
+      },
+      {
+        type: "slice",
+        cell: beginCell().storeAddress(usdtTonPoolAddress).endCell(),
       },
     ]);
     return result.stack.readAddress();
